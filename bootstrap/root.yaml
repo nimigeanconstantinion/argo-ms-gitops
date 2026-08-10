@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Source: argo-apps/ folder din acest repo (App of Apps)
+  source:
+    repoURL: https://github.com/__GITHUB_USERNAME__/__GITHUB_REPO__.git
+    targetRevision: main   # SAU master — ajustează după branch-ul real al repo-ului
+    path: argo-apps
+    directory:
+      recurse: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  # Auto-sync: orice fișier nou în argo-apps/ devine automat o Application
+  syncPolicy:
+    automated:
+      prune: true       # șterge resurse care nu mai sunt în git
+      selfHeal: true    # corectează drift dacă cineva modifică direct în cluster
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true

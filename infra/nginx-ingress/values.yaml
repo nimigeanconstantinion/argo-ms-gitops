@@ -1,0 +1,31 @@
+# NGINX Ingress Controller
+#
+# Pentru setup cu Cloudflare Tunnel: type=ClusterIP (cloudflared intern conectează aici)
+# Pentru setup cu port-forward + DDNS: type=LoadBalancer (K3s mapează automat 80/443)
+
+controller:
+  service:
+    # ClusterIP dacă folosești Cloudflare Tunnel sau alt tunel intern
+    # LoadBalancer dacă folosești port-forward 80/443 din router
+    type: LoadBalancer
+
+  replicaCount: 1
+
+  # Headers necesare când suntem în spatele unui proxy/tunnel
+  config:
+    use-forwarded-headers: "true"
+    compute-full-forwarded-for: "true"
+    use-proxy-protocol: "false"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: true

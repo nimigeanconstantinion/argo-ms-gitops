@@ -1,0 +1,20 @@
+# Sealed Secrets Controller
+# CLI: kubeseal — instalat pe workstation pentru sealing local
+
+# Numele standard ca kubeseal CLI să-l găsească default
+fullnameOverride: sealed-secrets-controller
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+replicaCount: 1
+
+# Metrics endpoint dezactivat — activează când ai Prometheus instalat
+metrics:
+  serviceMonitor:
+    enabled: false

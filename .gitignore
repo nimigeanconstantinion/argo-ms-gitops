@@ -1,0 +1,28 @@
+# Local secrets (NU commit niciodată!)
+*.key
+*.pem
+*-secret-raw.yaml
+.env
+.env.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Helm cache
+charts/
+Chart.lock
+
+# Logs
+*.log
+
+# Backup files
+*.bak
+*.backup
