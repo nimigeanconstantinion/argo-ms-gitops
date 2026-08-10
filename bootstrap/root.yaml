@@ -10,8 +10,8 @@ spec:
 
   # Source: argo-apps/ folder din acest repo (App of Apps)
   source:
-    repoURL: https://github.com/__GITHUB_USERNAME__/__GITHUB_REPO__.git
-    targetRevision: main   # SAU master — ajustează după branch-ul real al repo-ului
+    repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+    targetRevision: master
     path: argo-apps
     directory:
       recurse: false
