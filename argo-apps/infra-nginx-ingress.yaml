@@ -23,7 +23,7 @@ spec:
 
     # Sursa 2: values overrides din acest repo
     - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
-      targetRevision: main
+      targetRevision: master
       ref: values
 
   destination:
