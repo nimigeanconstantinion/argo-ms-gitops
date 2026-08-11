@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-ingress
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    
+spec:
+  project: default
+
+  # Single-source: doar manifestele YAML din infra/argocd-ingress/
+  source:
+    repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+    targetRevision: master
+    path: infra/argocd-ingress
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
