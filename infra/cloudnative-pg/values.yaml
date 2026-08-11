@@ -1,0 +1,27 @@
+# CloudNativePG Operator
+#
+# Gestionează CRDs: Cluster, Backup, ScheduledBackup, Pooler, Database, Publication, Subscription
+#
+# Pattern: 1 operator pe cluster → gestionează Postgres Cluster CRs din orice namespace
+
+# Watch toate namespace-urile
+config:
+  clusterWide: true
+
+# Resurse modeste pentru home lab
+resources:
+  requests:
+    cpu: 100m
+    memory: 200Mi
+  limits:
+    cpu: 500m
+    memory: 400Mi
+
+# Webhook expus pe portul standard
+webhook:
+  port: 9443
+
+# Monitoring activat — operator expune metrics pe :8080
+monitoring:
+  podMonitorEnabled: false
+  podMonitorAdditionalLabels: {}
