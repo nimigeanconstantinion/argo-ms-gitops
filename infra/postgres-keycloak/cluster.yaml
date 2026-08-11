@@ -1,0 +1,43 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-keycloak
+  namespace: data
+spec:
+  instances: 1
+
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
+  # Annotations propagate to derived resources (PVC, Secret).
+  # Reflector vede annotations pe secret și-l mirror-uiește în ns `auth`.
+  inheritedMetadata:
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+      reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces: "auth"
+      reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
+      reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "auth"
+
+  storage:
+    size: 5Gi
+    storageClass: local-path
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  bootstrap:
+    initdb:
+      database: keycloak
+      owner: keycloak
+
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: "128MB"
+
+  monitoring:
+    enablePodMonitor: false
