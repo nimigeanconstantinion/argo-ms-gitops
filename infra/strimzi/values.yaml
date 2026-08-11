@@ -1,0 +1,23 @@
+# Strimzi Kafka Operator
+#
+# Gestionează CRDs: Kafka, KafkaTopic, KafkaUser, KafkaConnect, KafkaMirrorMaker2, KafkaBridge, KafkaConnector
+#
+# Pattern: 1 operator pe cluster → poate gestiona Kafka CR-uri din orice namespace
+
+# Watch toate namespace-urile pentru CR-uri
+watchAnyNamespace: true
+
+# Resurse modeste pentru home lab
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Log level operator (INFO suficient pentru debug)
+logLevel: INFO
+
+# Generate Network Policies pentru izolare (recomandat)
+generateNetworkPolicy: true
