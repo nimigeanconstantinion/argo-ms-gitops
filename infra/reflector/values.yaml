@@ -1,0 +1,12 @@
+# Reflector (emberstack) — mirror secrets/configmaps cross-namespace
+#
+# Folosit pentru: secretul Postgres generat de CNPG în ns `data` să fie
+# vizibil în ns `keycloak` (consumat de Keycloak CR).
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
