@@ -6,7 +6,7 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP" # Asigură-te că folosești HTTP dacă serverul rulează cu --insecure
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS" # Asigură-te că folosești HTTP dacă serverul rulează cu --insecure
 spec:
   ingressClassName: nginx
   tls:
@@ -22,4 +22,5 @@ spec:
               service:
                 name: argo-cd-argocd-server   # nu argo-cd-argocd-server
                 port:
-                  number: 80          # nu 443 — server e --insecure
+                  name: https
+                  # number: 80          # nu 443 — server e --insecure
