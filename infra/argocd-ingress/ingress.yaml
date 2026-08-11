@@ -6,6 +6,7 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP" # Asigură-te că folosești HTTP dacă serverul rulează cu --insecure
 spec:
   ingressClassName: nginx
   tls:
