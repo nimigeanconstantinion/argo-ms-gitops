@@ -1,0 +1,40 @@
+# ECK Operator - values pentru clusterul mycode
+#
+# Operator pentru Elasticsearch / Kibana / Logstash / Beats / APM
+# Documentation: https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-overview.html
+
+# Single replica suficient pentru home lab
+replicaCount: 1
+
+# Resource limits modeste
+resources:
+  requests:
+    cpu: 100m
+    memory: 150Mi
+  limits:
+    cpu: 1
+    memory: 512Mi
+
+# Operator-ul instalează CRDs pentru:
+# - elasticsearch.k8s.elastic.co
+# - kibana.k8s.elastic.co
+# - logstash.k8s.elastic.co
+# - beat.k8s.elastic.co
+# - apmserver.k8s.elastic.co
+# - elasticagent.k8s.elastic.co
+# - enterprisesearch.k8s.elastic.co
+# - stackconfigpolicy.k8s.elastic.co
+installCRDs: true
+
+# Watch toate namespace-urile pentru CR-uri ECK (ES, Kibana, Beat în `logging`)
+# Empty list = cluster-wide watch (default)
+managedNamespaces: []
+
+# Webhook pentru validare CRDs
+webhook:
+  enabled: true
+
+# Limit ce moduri ECK gestionează
+# Default: gestionează toate Elastic stack components
+nodeSelector: {}
+tolerations: []

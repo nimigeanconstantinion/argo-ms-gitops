@@ -1,0 +1,14 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: eck-operator
+  namespace: logging
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      control-plane: elastic-operator
+  endpoints:
+    - port: metrics
+      interval: 30s
