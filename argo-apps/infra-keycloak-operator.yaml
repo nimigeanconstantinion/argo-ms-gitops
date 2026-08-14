@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keycloak-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Single-source: manifeste oficiale din repo keycloak/keycloak-k8s-resources
+  # Conține CRD-urile (Keycloak, KeycloakRealmImport) + Deployment + RBAC operator
+  source:
+    repoURL: https://github.com/keycloak/keycloak-k8s-resources.git
+    targetRevision: 26.1.4
+    path: kubernetes
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: auth
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

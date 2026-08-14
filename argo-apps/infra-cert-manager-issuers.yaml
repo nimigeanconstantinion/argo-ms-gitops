@@ -11,7 +11,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/nimigeanconstantinion/ms-gitops.git
+    repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
     targetRevision: master
     path: infra/cert-manager-issuers
 
