@@ -1,0 +1,30 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: default
+  namespace: monitoring
+  labels:
+    # Trebuie să matche cu alertmanagerConfigSelector din kube-prometheus-stack chart
+    alertmanagerConfig: default
+spec:
+  route:
+    receiver: slack
+    groupBy: ["alertname", "namespace"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    routes:
+      - matchers:
+          - name: severity
+            value: critical
+        receiver: slack
+        groupWait: 0s
+        repeatInterval: 1h
+
+  receivers:
+    - name: slack
+      webhookConfigs:
+        - urlSecret:
+            name: slack-webhook
+            key: url
+          sendResolved: true

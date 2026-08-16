@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 65.5.0
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/infra/kube-prometheus-stack/values.yaml
+
+    - repoURL: https://github.com/nimigeanconstantinion/ms-gitops.git
+      targetRevision: master
+      ref: values
+
+    # ⬇ Adăugare nouă: SealedSecret pentru Grafana admin
+    - repoURL: https://github.com/nimigeanconstantinion/ms-gitops.git
+      targetRevision: master
+      path: infra/kube-prometheus-stack/sealed-secrets
+      directory:
+        include: "*.yaml"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  # Ignoră drift cosmetic pe CRD status (chart-ul re-injectează la fiecare reconcile)
+  # + câmpuri din Deployment.status care apar doar din K8s 1.31+ (terminatingReplicas)
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /status
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /status/terminatingReplicas
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /status/terminatingReplicas
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - ApplyOutOfSyncOnly=true

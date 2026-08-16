@@ -1,0 +1,153 @@
+# kube-prometheus-stack - values pentru clusterul ctin (server2)
+#
+# Stack complet observability:
+# - Prometheus (collect metrics)
+# - Alertmanager (alerts)
+# - kube-state-metrics (K8s resources metrics)
+# - prometheus-node-exporter (node metrics)
+# - ServiceMonitor + PodMonitor CRDs
+#
+# Grafana dezactivată — gestionată separat prin Grafana Operator
+
+# ===== PROMETHEUS =====
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 7d
+    retentionSize: "8GiB"
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1
+        memory: 1Gi
+    # Auto-discovery ServiceMonitors din TOATE namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 10Gi
+
+
+# ===== GRAFANA =====
+# Activat — Grafana embedded din kube-prometheus-stack
+grafana:
+  enabled: true
+
+  # Admin user/pass din SealedSecret
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # Storage persistent — dashboards salvate manual, plugins, state
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: local-path
+    size: 5Gi
+
+  # Sidecar care încarcă dashboards/datasources din ConfigMaps cu label
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folder: /var/lib/grafana/dashboards
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      labelValue: "1"
+      searchNamespace: ALL
+
+  # Resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Ingress + TLS auto via cert-manager
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - grafana.icode.mywire.org
+    tls:
+      - hosts:
+          - grafana.icode.mywire.org
+        secretName: grafana-tls
+
+  # Service intern — acces doar prin Ingress
+  service:
+    type: ClusterIP
+
+  # Default config Grafana
+  grafana.ini:
+    server:
+      root_url: "https://grafana.icode.mywire.org"
+    auth.anonymous:
+      enabled: false
+
+  # Datasources și dashboards EMBEDDED — vin gratis cu chart-ul
+  # (nu trebuie să le configurezi manual; kube-prometheus-stack le auto-configurează)
+
+# ===== ALERTMANAGER =====
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+    alertmanagerConfigSelector:
+      matchLabels:
+        alertmanagerConfig: default
+    alertmanagerConfigMatcherStrategy:
+      type: None    
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 1Gi
+
+# ===== NODE EXPORTER =====
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 30Mi
+    limits:
+      cpu: 200m
+      memory: 50Mi
+
+# ===== KUBE-STATE-METRICS =====
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# ===== CRDs =====
+crds:
+  enabled: true

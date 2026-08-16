@@ -1,7 +1,7 @@
 # Local secrets (NU commit niciodată!)
 *.key
 *.pem
-*-secret-raw.yaml
+*-raw.yaml
 .env
 .env.local
 
