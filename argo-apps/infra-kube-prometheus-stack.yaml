@@ -19,12 +19,12 @@ spec:
         valueFiles:
           - $values/infra/kube-prometheus-stack/values.yaml
 
-    - repoURL: https://github.com/nimigeanconstantinion/ms-gitops.git
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
       targetRevision: master
       ref: values
 
     # ⬇ Adăugare nouă: SealedSecret pentru Grafana admin
-    - repoURL: https://github.com/nimigeanconstantinion/ms-gitops.git
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
       targetRevision: master
       path: infra/kube-prometheus-stack/sealed-secrets
       directory:
