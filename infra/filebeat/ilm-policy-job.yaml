@@ -1,0 +1,77 @@
+# Politica ILM pentru indexurile Filebeat — retentie cu faza de STERGERE.
+#
+# De ce exista Job-ul: Filebeat isi instaleaza singur o politica `filebeat`, dar
+# doar cu `rollover`, FARA faza `delete` — indexurile nu dispar niciodata si umplu
+# discul nodului (Elasticsearch e pe `local-path`, care NU impune cota: un PVC
+# "de 10Gi" a ajuns sa ocupe 60G si a scos nodul in DiskPressure).
+#
+# Filebeat are `setup.ilm.overwrite: false` implicit, deci NU rescrie politica daca
+# exista deja — Job-ul o pune inaintea lui si ramane.
+#
+# PostSync (nu Sync): are nevoie de Elasticsearch pornit si de politica deja creata
+# de Filebeat. Idempotent — la fiecare sync rescrie aceeasi politica.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: filebeat-ilm-policy
+  namespace: logging
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ilm
+          image: curlimages/curl:8.10.1
+          env:
+            - name: ES_URL
+              value: https://elasticsearch-es-http.logging.svc:9200
+            - name: ES_PASSWORD
+              valueFrom: { secretKeyRef: { name: elasticsearch-es-elastic-user, key: elastic } }
+            - name: RETENTION
+              value: "7d"
+            - name: STREAM
+              value: "filebeat-*"
+          command:
+            - sh
+            - -ec
+            - |
+              # master_timeout mare: default-ul de 30s expira cand coada de cluster
+              # state e incarcata, iar clientul renunta desi task-ul ramane in coada.
+              TMO="master_timeout=5m&timeout=5m"
+              ES="curl -sS -k --max-time 600 -u elastic:$ES_PASSWORD"
+
+              until $ES "$ES_URL/_cluster/health" | grep -q '"status"'; do
+                echo "astept Elasticsearch..."; sleep 5
+              done
+
+              echo "1/3 politica ILM cu faza delete la $RETENTION"
+              $ES -X PUT "$ES_URL/_ilm/policy/filebeat?$TMO" -H 'Content-Type: application/json' -d "{
+                \"policy\": {
+                  \"phases\": {
+                    \"hot\": {
+                      \"min_age\": \"0ms\",
+                      \"actions\": {
+                        \"rollover\": { \"max_age\": \"1d\", \"max_primary_shard_size\": \"2gb\" }
+                      }
+                    },
+                    \"delete\": {
+                      \"min_age\": \"$RETENTION\",
+                      \"actions\": { \"delete\": {} }
+                    }
+                  }
+                }
+              }"
+
+              echo "2/3 atasez politica pe indexurile existente"
+              $ES -X PUT "$ES_URL/$STREAM/_settings?ignore_unavailable=true&allow_no_indices=true&$TMO" \
+                -H 'Content-Type: application/json' -d '{"index.lifecycle.name":"filebeat"}'
+
+              echo "3/3 poll interval ILM la 1m"
+              $ES -X PUT "$ES_URL/_cluster/settings?$TMO" -H 'Content-Type: application/json' \
+                -d '{"persistent":{"indices.lifecycle.poll_interval":"1m"}}'
+
+              echo "OK: retentie $RETENTION aplicata pe indexurile filebeat."
