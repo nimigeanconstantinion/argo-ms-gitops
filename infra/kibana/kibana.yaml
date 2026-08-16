@@ -1,0 +1,45 @@
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: kibana
+  namespace: logging
+spec:
+  version: 8.15.3
+  count: 1
+
+  elasticsearchRef:
+    name: elasticsearch
+    namespace: logging
+
+  config:
+    telemetry.optIn: false
+    xpack.banners.placement: "top"
+    xpack.banners.textContent: "Kibana on ctin (server2)"
+    # URL extern prin care e accesat Kibana (necesar pentru link-uri interne corecte)
+    server.publicBaseUrl: "https://kibana.icode.mywire.org"
+
+  podTemplate:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+        - name: kibana
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: false

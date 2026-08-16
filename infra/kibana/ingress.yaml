@@ -1,0 +1,37 @@
+# Ingress pentru Kibana — expune UI public pe https://kibana.icode.mywire.org
+#
+# Specificul Kibana cu ECK:
+# - Service-ul kibana-kb-http servește pe HTTPS (port 5601) cu cert SELF-SIGNED
+# - nginx-ingress trebuie să "vorbească" HTTPS cu backend-ul (backend-protocol: HTTPS)
+# - Cert-ul self-signed nu trebuie verificat (proxy-ssl-verify: off)
+# - cert-manager obține un cert VALID de la Let's Encrypt pentru hostname-ul extern
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kibana
+  namespace: logging
+  annotations:
+    # cert-manager: obține automat cert pentru kibana.icode.mywire.org
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+    # Backend Kibana este HTTPS self-signed
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/proxy-ssl-verify: "off"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - kibana.icode.mywire.org
+      secretName: kibana-tls-cert
+  rules:
+    - host: kibana.icode.mywire.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kibana-kb-http
+                port:
+                  number: 5601
