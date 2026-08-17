@@ -11,6 +11,12 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingAdmissionPolicy
+      name: moco-delete-validator
+      jsonPointers:
+        - /spec
 
   sources:
     - repoURL: https://cybozu-go.github.io/moco/
