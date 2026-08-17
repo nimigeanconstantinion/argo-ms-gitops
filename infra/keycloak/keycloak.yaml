@@ -41,9 +41,15 @@ spec:
     headers: xforwarded
 
   resources:
+    # requests:
+    #   cpu: 200m
+    #   memory: 512Mi
+    # limits:
+    #   cpu: 1
+    #   memory: 1Gi
     requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: 1
+      cpu: 500m
       memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 2Gi # <--- Mărit la 2Gi pentru a opri OOMKilled      
