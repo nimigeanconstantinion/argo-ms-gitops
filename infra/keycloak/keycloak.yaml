@@ -1,0 +1,49 @@
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: Keycloak
+metadata:
+  name: keycloak
+  namespace: auth
+spec:
+  instances: 1
+  features:
+    enabled:
+      - token-exchange
+  additionalOptions:
+    - name: metrics-enabled
+      value: "true"
+    - name: health-enabled
+      value: "true"
+  ingress:
+    enabled: false    
+  # Postgres extern (CNPG în ns `data`, secret mirror-uit aici prin Reflector)
+  db:
+    vendor: postgres
+    host: postgres-keycloak-rw.data.svc.cluster.local
+    port: 5432
+    database: keycloak
+    usernameSecret:
+      name: postgres-keycloak-app
+      key: username
+    passwordSecret:
+      name: postgres-keycloak-app
+      key: password
+
+  hostname:
+    hostname: https://auth.icode.mywire.org
+    strict: true
+
+  # HTTP intern — TLS terminat de Cloudflare extern + nginx HTTP intern
+  http:
+    httpEnabled: true
+
+  # Proxy headers (X-Forwarded-For, etc.) — nginx-ingress + Cloudflare le setează
+  proxy:
+    headers: xforwarded
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 1Gi

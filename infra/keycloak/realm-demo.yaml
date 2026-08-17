@@ -1,0 +1,24 @@
+# Realm demo importat declarativ. KeycloakRealmImport = creare declarativa (nu
+# update/delete). Contine realm-ul + un client public `demo-client` pentru testarea
+# login-ului din aplicatii. Userii ii creezi din UI sau ii adaugi aici la nevoie.
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakRealmImport
+metadata:
+  name: demo-realm
+  namespace: auth
+spec:
+  keycloakCRName: keycloak
+  realm:
+    realm: demo
+    enabled: true
+    displayName: "Demo Realm"
+    clients:
+      - clientId: demo-client
+        enabled: true
+        publicClient: true
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: true
+        redirectUris:
+          - "*"
+        webOrigins:
+          - "*"
