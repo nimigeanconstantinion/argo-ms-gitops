@@ -1,0 +1,26 @@
+# PostgreSQL via CloudNativePG.
+# initdb creeaza baza `demo` + userul owner `demo`. CNPG genereaza automat un Secret
+# `postgres-app` (type basic-auth) cu user+parola — nu e nevoie de SealedSecret.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  namespace: data
+spec:
+  instances: 1
+
+  storage:
+    size: 5Gi
+    storageClass: local-path
+
+  bootstrap:
+    initdb:
+      database: demo
+      owner: demo
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

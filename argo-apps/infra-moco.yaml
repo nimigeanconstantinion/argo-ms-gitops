@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: moco
+  namespace: argocd
+  annotations:
+    # wave 1: MOCO are nevoie de cert-manager (wave 0) gata inainte — foloseste
+    # webhook-uri cu certificate emise de cert-manager.
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://cybozu-go.github.io/moco/
+      chart: moco
+      targetRevision: 0.25.0
+      helm:
+        releaseName: moco
+        valueFiles:
+          - $values/infra/moco/values.yaml
+
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+      targetRevision: master
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

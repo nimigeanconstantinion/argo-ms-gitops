@@ -1,0 +1,44 @@
+# Provisioneaza userul + baza de aplicatie in MySQL (MOCO).
+# MOCO nu are echivalentul CNPG `managed.roles`, deci creem userul prin SQL,
+# conectati ca `moco-writable` (are CREATE USER + GRANT).
+# Job idempotent + Argo Sync hook: ruleaza la fiecare sync si RECONCILIAZA parola
+# (ALTER USER), deci supravietuieste recrearii clusterului. Parola vine din
+# SealedSecret-ul `data-service-db` pe care il detii tu.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-service-db-init
+  namespace: data
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: mysql:8.4
+          env:
+            # moco-mysql contine DOAR chei de parola; userul e constanta fixa `moco-writable`.
+            - name: WRITABLE_PASSWORD
+              valueFrom: { secretKeyRef: { name: moco-mysql, key: WRITABLE_PASSWORD } }
+            - name: APP_USER
+              valueFrom: { secretKeyRef: { name: data-service-db, key: username } }
+            - name: APP_PASSWORD
+              valueFrom: { secretKeyRef: { name: data-service-db, key: password } }
+          command:
+            - bash
+            - -ec
+            - |
+              until mysqladmin ping -h moco-mysql-primary.data.svc -umoco-writable -p"$WRITABLE_PASSWORD" --silent; do
+                echo "astept MySQL..."; sleep 3
+              done
+              mysql -h moco-mysql-primary.data.svc -umoco-writable -p"$WRITABLE_PASSWORD" <<SQL
+              CREATE DATABASE IF NOT EXISTS micro_db;
+              CREATE USER IF NOT EXISTS '${APP_USER}'@'%' IDENTIFIED BY '${APP_PASSWORD}';
+              ALTER USER '${APP_USER}'@'%' IDENTIFIED BY '${APP_PASSWORD}';
+              GRANT ALL PRIVILEGES ON micro_db.* TO '${APP_USER}'@'%';
+              SQL
+              echo "OK: user ${APP_USER} + baza micro_db provizionate."

@@ -1,0 +1,35 @@
+# MySQL via MOCO.
+# MOCO porneste un primary writable single-instance si genereaza automat Secret-ul
+# `moco-mysql` (in ns data) cu DOAR parolele userilor de sistem (chei *_PASSWORD).
+# Userii au nume FIXE (moco-writable, moco-admin...) — NU sunt in secret.
+# Userul de aplicatie (dataapp) + baza micro_db sunt provizionate de
+# `mysql-init-job.yaml` (conectat ca moco-writable). App-ul foloseste dataapp.
+#   Host:   moco-mysql-primary.data.svc   Port: 3306
+#   Creds:  Secret `moco-mysql` -> cheie WRITABLE_PASSWORD (user = moco-writable, fix)
+apiVersion: moco.cybozu.com/v1beta2
+kind: MySQLCluster
+metadata:
+  name: mysql
+  namespace: data
+spec:
+  replicas: 1
+  podTemplate:
+    spec:
+      containers:
+        - name: mysqld
+          image: ghcr.io/cybozu-go/moco/mysql:8.4.8
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi
