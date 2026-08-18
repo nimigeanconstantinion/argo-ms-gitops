@@ -1,0 +1,27 @@
+fullnameOverride: kong
+
+ingressController:
+  enabled: false
+
+env:
+  database: "off"
+  # Kong suprascrie X-Forwarded-Proto cu schema pe care o primeste EL (http, in cluster),
+  # daca cel care i-o trimite nu e in trusted_ips. Rezultat: aplicatiile din spate credeau
+  # ca cererea a venit pe http si construiau URL-uri absolute cu http (springdoc -> `servers:`),
+  # iar browserul le bloca ca Mixed Content pe pagina Swagger servita pe https.
+  # kong-proxy e ClusterIP (doar nginx ingress ajunge la el), deci "toate IP-urile" e sigur aici.
+  trusted_ips: "0.0.0.0/0"
+  real_ip_header: "X-Forwarded-For"
+  real_ip_recursive: "on"
+
+dblessConfig:
+  configMap: kong-declarative
+
+proxy:
+  type: ClusterIP
+
+admin:
+  enabled: false
+
+manager:
+  enabled: false

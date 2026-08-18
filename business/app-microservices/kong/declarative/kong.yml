@@ -1,0 +1,29 @@
+_format_version: "3.0"
+
+upstreams:
+  - name: data-service-upstream
+    targets:
+      - target: data-service.business.svc:8081
+        weight: 100
+  - name: importer-service-upstream
+    targets:
+      - target: importer-service.business.svc:8082
+        weight: 100
+
+services:
+  - name: data-service
+    host: data-service-upstream
+    port: 8081
+    protocol: http
+    routes:
+      - name: data-service
+        hosts:
+          - data-service.icode.mywire.org
+  - name: importer-service
+    host: importer-service-upstream
+    port: 8082
+    protocol: http
+    routes:
+      - name: importer-service
+        hosts:
+          - importer-service.icode.mywire.org
