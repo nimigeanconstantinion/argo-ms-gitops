@@ -23,8 +23,10 @@ spec:
 
   receivers:
     - name: slack
-      webhookConfigs:
-        - urlSecret:
+      slackConfigs:
+        - apiURL:
             name: slack-webhook
             key: url
+          title: '{{ template "slack.default.title" . }}'
+          text: '{{ template "slack.default.text" . }}'
           sendResolved: true
