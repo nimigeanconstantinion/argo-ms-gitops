@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rsk-keycloak
+  namespace: argocd
+  annotations:
+    # wave 4: dupa Keycloak Operator + Keycloak CR (wave 3). Realm-ul e aplicat de
+    # keycloak-config-cli (Sync hook Job, kustomize) — idempotent, update pe realm existent.
+    argocd.argoproj.io/sync-wave: "4"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+    targetRevision: master
+    path: business/app-microservices/keycloak
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: auth
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
