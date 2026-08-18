@@ -137,6 +137,13 @@ clients:
     defaultClientScopes:
       - "profile"
 
+roles:
+  realm:
+    - name: USER
+      description: "Default application user"
+    - name: ADMIN
+      description: "Application administrator"
+
 # oauth2-proxy lasa sa treaca doar membrii /admins
 groups:
   - name: admins
