@@ -1,0 +1,32 @@
+# kafbat kafka-ui — UI web pentru clusterul Kafka `demo`.
+# Se conecteaza la listener-ul plain (9092) prin service-ul bootstrap intern Strimzi.
+yamlApplicationConfig:
+  kafka:
+    clusters:
+      - name: demo
+        bootstrapServers: demo-kafka-bootstrap.messaging.svc.cluster.local:9092
+  auth:
+    type: disabled
+  management:
+    health:
+      ldap:
+        enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+# Ingress public cu TLS via cert-manager (acelasi pattern ca grafana/kibana/argocd).
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  host: kafka-ui.icode.mywire.org
+  tls:
+    enabled: true
+    secretName: kafka-ui-tls-cert

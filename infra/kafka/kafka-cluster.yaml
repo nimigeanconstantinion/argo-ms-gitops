@@ -1,0 +1,32 @@
+# Kafka cluster `demo` (KRaft).
+# In Strimzi 1.0.x KRaft + node pools sunt default — nu mai sunt necesare anotarile
+# strimzi.io/kraft / strimzi.io/node-pools. Replicile/storage vin din KafkaNodePool.
+# Factor de replicare 1 peste tot (single broker lab).
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: demo
+  namespace: messaging
+spec:
+  kafka:
+    version: 4.2.0
+    metadataVersion: 4.2-IV1
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+  # Entity Operator: reconciliaza KafkaTopic + KafkaUser declarativ.
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}

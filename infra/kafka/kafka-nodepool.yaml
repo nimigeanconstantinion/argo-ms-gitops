@@ -1,0 +1,29 @@
+# KafkaNodePool — defineste nodurile clusterului `demo`.
+# Single-instance lab: 1 nod cu rol COMBINAT (controller + broker), KRaft.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  namespace: messaging
+  labels:
+    strimzi.io/cluster: demo
+spec:
+  replicas: 1
+  roles:
+    - controller
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 10Gi
+        class: local-path
+        kraftMetadata: shared
+        deleteClaim: false
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
