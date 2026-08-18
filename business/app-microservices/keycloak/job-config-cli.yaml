@@ -1,0 +1,46 @@
+# keycloak-config-cli — aplica realm-ul din git IDEMPOTENT (create + UPDATE pe realm existent).
+# Inlocuieste KeycloakRealmImport (care era create-only si cerea reset la orice modificare).
+# Ruleaza ca Sync hook: la fiecare sync ArgoCD, jobul e recreat si aplica diff-ul de realm.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-config-cli
+  namespace: auth
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: keycloak-config-cli
+          image: adorsys/keycloak-config-cli:6.5.1-26.1.0
+          env:
+            - name: KEYCLOAK_URL
+              value: https://auth.icode.mywire.org
+            - name: KEYCLOAK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-initial-admin
+                  key: username
+            - name: KEYCLOAK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-initial-admin
+                  key: password
+            - name: KEYCLOAK_AVAILABILITYCHECK_ENABLED
+              value: "true"
+            - name: KEYCLOAK_AVAILABILITYCHECK_TIMEOUT
+              value: 120s
+            - name: IMPORT_FILES_LOCATIONS
+              value: /config/*.yaml
+          volumeMounts:
+            - name: realm
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm-rsk

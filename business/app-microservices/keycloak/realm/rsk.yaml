@@ -1,0 +1,174 @@
+# Realm rsk — sursa de adevar, aplicat de keycloak-config-cli (idempotent: create + update).
+# Orice modificare aici -> commit + push -> ArgoCD sync -> jobul config-cli o aplica pe realmul LIVE.
+realm: rsk
+enabled: true
+displayName: "RSK Realm"
+registrationAllowed: true
+
+clients:
+  # Client de test pentru token via direct access grant (curl/Postman) — fara redirect.
+  - clientId: demo-client
+    enabled: true
+    publicClient: true
+    standardFlowEnabled: false
+    directAccessGrantsEnabled: true
+    redirectUris: []
+    webOrigins: []
+
+  - clientId: new-client
+    enabled: true
+    publicClient: true
+    standardFlowEnabled: false
+    directAccessGrantsEnabled: true
+    redirectUris: []
+    webOrigins: []
+
+  # react-client (Frontend), PKCE.
+  - clientId: react-client
+    protocol: openid-connect
+    enabled: true
+    publicClient: true
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: true
+    redirectUris:
+      - "http://localhost:5174/*"
+      - "http://localhost:5000/*"
+      - "http://localhost:3000/*"
+    webOrigins:
+      - "+"
+    attributes:
+      pkce.code.challenge.method: "S256"
+      post.logout.redirect.uris: "+"
+
+  # Client dedicat pentru Swagger UI (OAuth2 authorizationCode + PKCE).
+  - clientId: data-service-swagger
+    name: "Data Service Swagger"
+    protocol: openid-connect
+    enabled: true
+    publicClient: true
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: false
+    redirectUris:
+      - "http://localhost:8081/swagger-ui/oauth2-redirect.html"
+      - "https://data-service.icode.mywire.org/swagger-ui/oauth2-redirect.html"
+    webOrigins:
+      - "+"
+    attributes:
+      pkce.code.challenge.method: "S256"
+      post.logout.redirect.uris: "+"
+
+  # Client dedicat pentru Swagger UI importer (OAuth2 authorizationCode + PKCE).
+  - clientId: importer-service-swagger
+    name: "Importer Service Swagger"
+    protocol: openid-connect
+    enabled: true
+    publicClient: true
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: false
+    redirectUris:
+      - "http://localhost:8082/swagger-ui/oauth2-redirect.html"
+      - "https://importer-service.icode.mywire.org/swagger-ui/oauth2-redirect.html"
+    webOrigins:
+      - "+"
+    attributes:
+      pkce.code.challenge.method: "S256"
+      post.logout.redirect.uris: "+"
+
+  # oauth2-proxy: poarta de auth (network gate) inainte de Kong.
+  # Secret EXPLICIT (determinist) — aceeasi valoare e in SealedSecret oauth2-proxy-keycloak (ns business).
+  - clientId: oauth2-proxy
+    name: "OAuth2 Proxy"
+    protocol: openid-connect
+    enabled: true
+    publicClient: false
+    clientAuthenticatorType: "client-secret"
+    secret: "BtJSmntRRePW105y3kM1f3V9kxc/pN6AA8hIw/N8wjA="
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: false
+    redirectUris:
+      - "https://data-service.icode.mywire.org/oauth2/callback"
+    webOrigins:
+      - "+"
+    # scope-urile default Keycloak, explicit ("openid" NU exista ca scope -> NPE in config-cli).
+    # "roles" e obligatoriu: pune aud=account in access token (cerut de --oidc-extra-audience=account).
+    defaultClientScopes:
+      - "profile"
+      - "email"
+      - "roles"
+      - "web-origins"
+      - "acr"
+      - "basic"
+    protocolMappers:
+      - name: groups
+        protocol: openid-connect
+        protocolMapper: oidc-group-membership-mapper
+        config:
+          "claim.name": "groups"
+          "full.path": "true"
+          "access.token.claim": "true"
+          "id.token.claim": "true"
+          "userinfo.token.claim": "true"
+      # aud=oauth2-proxy in access token pentru ORICE user (altfel aud apare doar
+      # daca userul are roluri de account, si oauth2-proxy respinge token-ul fara aud).
+      - name: audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        config:
+          "included.client.audience": "oauth2-proxy"
+          "access.token.claim": "true"
+          "id.token.claim": "true"
+
+  # registration-service (service account cu secret explicit)
+  - clientId: registration-service
+    name: "Registration Service Client"
+    protocol: openid-connect
+    enabled: true
+    publicClient: false
+    bearerOnly: false
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: true
+    clientAuthenticatorType: "client-secret"
+    secret: "my-secret-keycloak"
+    fullScopeAllowed: true
+    redirectUris: []
+    webOrigins: []
+    defaultClientScopes:
+      - "profile"
+
+# oauth2-proxy lasa sa treaca doar membrii /admins
+groups:
+  - name: admins
+
+users:
+  - username: test
+    enabled: true
+    email: test@icode.local
+    firstName: Test
+    lastName: User
+    emailVerified: true
+    credentials:
+      - type: password
+        value: test
+        temporary: false
+    realmRoles:
+      - "USER"
+    clientRoles:
+      account:
+        - "view-profile"
+
+  - username: admin
+    enabled: true
+    email: admin@icode.local
+    firstName: Admin
+    lastName: User
+    emailVerified: true
+    credentials:
+      - type: password
+        value: admin
+        temporary: false
+    realmRoles:
+      - "ADMIN"
+    groups:
+      - "/admins"
