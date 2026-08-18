@@ -36,6 +36,12 @@ spec:
       directory:
         include: "alertmanager-config.yaml"
 
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+      targetRevision: master
+      path: infra/kube-prometheus-stack
+      directory:
+        include: "slack-test-alert.yaml"
+
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

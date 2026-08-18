@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slack-test-alert
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: slack-test
+      rules:
+        - alert: SlackTestAlert
+          expr: vector(1)
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "Slack test alert"
+            description: "Test alert for Alertmanager Slack notifications."
