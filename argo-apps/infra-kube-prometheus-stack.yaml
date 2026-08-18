@@ -30,6 +30,12 @@ spec:
       directory:
         include: "*.yaml"
 
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+      targetRevision: master
+      path: infra/kube-prometheus-stack
+      directory:
+        include: "alertmanager-config.yaml"
+
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
