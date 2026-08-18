@@ -20,7 +20,7 @@ spec:
         size: 10Gi
         class: local-path
         kraftMetadata: shared
-        deleteClaim: false
+        deleteClaim: true
   resources:
     requests:
       cpu: 250m
