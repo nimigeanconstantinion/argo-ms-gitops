@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: databases
+  namespace: argocd
+  annotations:
+    # wave 2: CR-urile se aplica DUPA ce operatorii (wave 0/1) au instalat CRD-urile.
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+    targetRevision: master
+    path: infra/databases
+    # recurse: include si subfolderul secrets/ (SealedSecret-ul Mongo).
+    # Fara asta ArgoCD citeste doar nivelul de sus si rateaza secrets/*.yaml.
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
