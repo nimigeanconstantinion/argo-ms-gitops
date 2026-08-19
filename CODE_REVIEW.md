@@ -1,14 +1,51 @@
-# Code review — `argo-ms-gitops`, commit `9a71d7d` („commit kong si data-service")
+# Code review — `argo-ms-gitops`
+
+**Runda 2**, la commit `230fc3e` („commit add infra-databases", 2026-08-19). Înlocuiește runda 1 (`af5cabc`, pe commit `9a71d7d`).
 
 Scop: de ce Application-ul `data-service` nu sincronizează în ArgoCD.
 
-Context: commit-ul mută în repo-ul nou `argo-ms-gitops` o parte din setup-ul care mergea în repo-ul vechi `ms-gitops` (local: `projects-elevi/constantin-gitops/`). Fișierele copiate sunt byte-identice cu originalele — nu ele sunt problema. Problema e **ce n-a fost copiat**: chart-ul pe care îl referă Application-ul și 3 Applications de care depinde lanțul.
+Context neschimbat: repo-ul nou mută pe bucăți setup-ul din `ms-gitops`. Fișierele copiate sunt byte-identice cu originalele — problema e ce n-a fost copiat încă.
+
+---
+
+## Ce s-a rezolvat din runda 1
+
+**B2 ✅ — `argo-apps/infra-databases.yaml` creat, corect.** Verificat `diff` contra originalului din `ms-gitops`: singura diferență e `repoURL`, actualizat la `argo-ms-gitops.git` (linia 15). `directory.recurse: true` păstrat (fără el s-ar fi ratat `secrets/*.yaml`), wave 2 păstrat, `ServerSideApply` păstrat. Exact ce trebuia.
+
+**Dar nu produce încă efectul dorit** — vezi B5 mai jos. Application-ul e corect scris; conținutul directorului pe care îl aplică nu e complet.
 
 ---
 
 ## 🔴 Critice
 
-### B1 — Application-ul indică un path care nu există în repo
+### B5 — NOU: `databases` conține un CR fără operatorul lui → sync-ul întregului Application eșuează
+
+`infra/databases/mongodb.yaml:5-6`
+
+```yaml
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+```
+
+CRD-ul `mongodbcommunity.mongodb.com` e instalat de MongoDB Community Operator. În `argo-ms-gitops` **nu există nici `argo-apps/infra-mongodb-operator.yaml`, nici `infra/mongodb-operator/`** — ambele au rămas în `ms-gitops`. Verificare: `ls infra/` nu conține `mongodb-operator`; `grep -l mongodb argo-apps/*` → gol.
+
+Am verificat toate cele 3 CR-uri din director, nu doar unul:
+
+| Fișier | `kind` | Operatorul lui | În repo nou? |
+|---|---|---|---|
+| `mysql.yaml` | `MySQLCluster` (moco.cybozu.com) | `argo-apps/infra-moco.yaml` | ✅ |
+| `postgres-cluster.yaml` | `Cluster` (postgresql.cnpg.io) | `argo-apps/infra-cloudnative-pg.yaml` | ✅ |
+| `mongodb.yaml` | `MongoDBCommunity` | — | ❌ |
+
+**De ce e critic și nu doar „un pod în minus":** ArgoCD face **dry-run pe TOATE resursele fazei înainte de a aplica ceva**. O resursă cu `kind` necunoscut pică la dry-run, iar operațiunea de sync e abandonată în bloc — mesajul e `one or more synchronization tasks are not valid`. Îl mai ai o dată în istoric: exact eroarea de la migrarea CRD-urilor Strimzi.
+
+Consecință directă: **`data-service-db` nu se aplică**, deși e în același director și e perfect valid. Deci simptomul rămâne identic cu cel din runda 1 — pod-ul în `CreateContainerConfigError: secret "data-service-db" not found` — dar cauza s-a mutat. Dacă te uiți doar la pod, pare că B2 n-a fost reparat; dovada e în `Application databases` → `SYNC FAILED`, nu în pod.
+
+**Recomandarea (o singură variantă):** scoate Mongo din repo-ul nou, nu adăuga operatorul. Nimic din stack nu-l folosește — `grep -rl mongo` în afara lui `infra/databases/` nu întoarce nimic; data-service și importer-service merg pe MySQL. Un operator în plus înseamnă un CRD, un Deployment și un wave de întreținut pentru zero consumatori. Îl aduci din `ms-gitops` când chiar apare un serviciu care cere Mongo.
+
+---
+
+### B1 — NEREZOLVAT: Application-ul indică un path care nu există în repo
 
 `argo-apps/app-data-service.yaml:16`
 
@@ -16,177 +53,64 @@ Context: commit-ul mută în repo-ul nou `argo-ms-gitops` o parte din setup-ul c
 path: business/charts/microservice
 ```
 
-În `argo-ms-gitops` nu există `business/charts/`. Verificare:
+Neschimbat față de runda 1. `git ls-tree -r --name-only HEAD business/` întoarce doar `app-microservices/**` — `business/charts/` nu există. Chart-ul e la `ms-gitops` → `business/charts/microservice/` (5 fișiere: `Chart.yaml`, `values.yaml`, `templates/{deployment,service,ingress}.yaml`).
 
-```
-git ls-tree -r --name-only HEAD business/
-business/app-microservices/data-service/values.yaml
-business/app-microservices/keycloak/...
-business/app-microservices/kong/...
-```
+ArgoCD: `ComparisonError ... app path does not exist`, la nivel de repo-server, înainte de orice comparație cu clusterul. **Acesta rămâne blocantul #1** — până nu-l rezolvi, B5 nici măcar nu contează, pentru că nu se generează niciun Deployment care să ceară secretul.
 
-Chart-ul (`Chart.yaml`, `templates/deployment.yaml`, `templates/service.yaml`, `templates/ingress.yaml`, `values.yaml`) există doar în repo-ul vechi, la `business/charts/microservice/`.
-
-Rezultat în ArgoCD: `ComparisonError` la nivel de Application, cu `rpc error: ... app path does not exist`. Nu se generează niciun manifest, deci nu ajunge niciodată să încerce un Deployment.
-
-**Mecanismul:** într-un Application multi-source, sursa cu `path:` + `helm:` e chart-ul, iar sursa cu `ref: values` e doar un repo montat sub `$values` pentru fișiere de valori. `valueFiles: [$values/...]` s-a rezolvat corect (fișierul chiar există), dar valorile nu au ce randa. Un chart lipsă e eroare de *repo-server*, înainte de orice comparație cu clusterul — de asta Application-ul e roșu fără să existe vreun pod.
+**Atenție la `.gitignore` când îl copiezi.** În `ms-gitops` chart-ul a fost o dată invizibil pentru ArgoCD exact din motivul ăsta: regula `charts/` prindea și `business/charts/`, deci folderul nu ajungea în git deși exista pe disc. `.gitignore`-ul din repo-ul nou trebuie verificat înainte de commit — un `git status` care nu-l arată e semnalul.
 
 ---
 
-### B2 — `infra/databases/` nu e referit de nicio Application
+### B3 — NEREZOLVAT: Kong nu are Application
 
-`argo-apps/` (lipsește `infra-databases.yaml`) vs `infra/databases/`
+`business/app-microservices/kong/**` (orfan) și `argo-apps/` (lipsește `app-kong.yaml`)
 
-Directorul există în repo și conține:
-
-```
-infra/databases/mysql.yaml              MySQLCluster (MOCO)
-infra/databases/mysql-init-job.yaml     creeaza userul dataapp + baza micro_db
-infra/databases/secrets/data-service-db-sealed.yaml
-```
-
-Dar nicio Application nu-l aplică (`grep -l databases argo-apps/` → gol). În repo-ul vechi exista `argo-apps/infra-databases.yaml`, wave 2, cu `directory.recurse: true`.
-
-Consecință directă, chiar după ce rezolvi B1: `business/app-microservices/data-service/values.yaml:27-29` cere
-
-```yaml
-secretEnv:
-  MYSQL_USERNAME: { secret: data-service-db, key: username }
-  MYSQL_PASSWORD: { secret: data-service-db, key: password }
-```
-
-Secret-ul `data-service-db` nu ajunge niciodată în cluster → pod-ul rămâne în `CreateContainerConfigError: secret "data-service-db" not found`. Și `MYSQL_URL` (`values.yaml:20`) arată spre `moco-mysql-primary.data.svc:3306/micro_db` — și `MySQLCluster`-ul, și baza `micro_db` vin tot din directorul neaplicat.
-
-Atenție la `recurse: true`: fără el ArgoCD citește doar nivelul de sus și ratează `secrets/*.yaml`. Comentariul din repo-ul vechi spunea exact asta.
+Neschimbat. Root app-ul scanează doar `argo-apps/` (`bootstrap/root.yaml:15-17`, `recurse: false`), deci `kong/values.yaml`, `kong/declarative/` și `kong/ingress/` sunt inerte. Ingress-ul `data-service-gateway.yaml:26-30` trimite spre Service-ul `kong-proxy`, care nu există → 503.
 
 ---
 
-### B3 — Kong nu are Application; Ingress-urile trimit spre un Service inexistent
+### B4 — NEREZOLVAT: oauth2-proxy lipsește complet
 
-`business/app-microservices/kong/` (orfan) și `argo-apps/` (lipsește `app-kong.yaml`)
+`kong/ingress/data-service-gateway.yaml:9-10` și `importer-service-gateway.yaml:9-10`
 
-Ai comis `kong/values.yaml`, `kong/declarative/{kong.yml,kustomization.yaml}` și `kong/ingress/*.yaml`, dar nimic nu le consumă. Root app-ul scanează doar `argo-apps/` (`bootstrap/root.yaml:15-17`, `recurse: false`), deci fișierele din `business/` sunt inerte până când un Application le referă.
+Neschimbat. Ambele Ingress-uri cer `auth-url: http://oauth2-proxy.business.svc.cluster.local:4180/oauth2/auth`, dar nici manifestele (`business/rsk/oauth2-proxy/` în vechi), nici Application-ul nu au fost aduse.
 
-Rezultat: `business/app-microservices/kong/ingress/data-service-gateway.yaml:26-30`
-
-```yaml
-backend:
-  service:
-    name: kong-proxy
-    port:
-      number: 80
-```
-
-`kong-proxy` nu există în namespace-ul `business` → nginx returnează 503 pe `data-service.icode.mywire.org`. Iar Ingress-ul nici măcar nu e aplicat, fiindcă și el e orfan (vezi M2).
-
-În repo-ul vechi, `app-kong.yaml` avea 4 surse: chart-ul de la `https://charts.konghq.com` (3.4.0), `ref: values`, `path: .../kong/ingress` și `path: .../kong/declarative`.
+`auth_request` spre un upstream care nu rezolvă DNS → nginx întoarce **500, nu 401** — pe toate rutele, inclusiv `/actuator/health`. Se citește ca „aplicația e picată" deși aplicația n-a fost atinsă.
 
 ---
 
-### B4 — oauth2-proxy lipsește complet, dar ambele Ingress-uri îl cer
+## 🟡 Importante (neschimbate din runda 1)
 
-`business/app-microservices/kong/ingress/data-service-gateway.yaml:9-10` și `importer-service-gateway.yaml:9-10`
-
-```yaml
-nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.business.svc.cluster.local:4180/oauth2/auth"
-nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
-```
-
-În `argo-ms-gitops` nu există nici manifestele oauth2-proxy, nici `app-oauth2-proxy.yaml`. În repo-ul vechi erau la `business/rsk/oauth2-proxy/` (deployment, service, ingress, sealed-secret) plus Application cu `recurse: true`.
-
-**Mecanismul:** `auth-url` face nginx să emită un sub-request (`auth_request`) la fiecare cerere, înainte de a o trimite la backend. Dacă acel upstream nu rezolvă DNS, nginx nu dă „acces interzis", ci **500** — pe toate rutele, inclusiv `/actuator/health` și pagina Swagger. E o eroare care se citește ca „aplicația e picată", deși aplicația n-a fost atinsă.
-
----
-
-## 🟡 Importante
-
-### M1 — `kong.yml` rutează spre `importer-service`, care nu există în acest repo
-
-`business/app-microservices/kong/declarative/kong.yml:8-11` și `:22-28`
-
-```yaml
-- name: importer-service-upstream
-  targets:
-    - target: importer-service.business.svc:8082
-```
-
-Nu există `business/app-microservices/importer-service/values.yaml` și nici `app-importer-service.yaml`. Kong dbless pornește oricum (nu validează DNS-ul target-urilor la boot), dar ruta `importer-service.icode.mywire.org` va da 503. Alege conștient: fie porți și importer-service acum, fie scoți ruta din `kong.yml` până atunci — să nu rămână o rută moartă care arată ca un bug de rețea.
-
-### M2 — `kong/ingress/` n-are `kustomization.yaml`; trebuie sursă separată de tip „directory"
-
-`business/app-microservices/kong/ingress/`
-
-`declarative/` are `kustomization.yaml` (generează ConfigMap-ul `kong-declarative`), dar `ingress/` are doar două manifeste simple. În repo-ul vechi mergea pentru că `app-kong.yaml` le lua ca **a treia sursă separată**, plain directory. Dacă reconstruiești app-kong cu o singură sursă pe `business/app-microservices/kong/`, Ingress-urile nu se aplică — ArgoCD alege un singur tip de sursă per `path`.
-
-### M3 — SealedSecret-ul e legat de cheia controller-ului, nu de repo
-
-`infra/databases/secrets/data-service-db-sealed.yaml:5-9`
-
-SealedSecret-ul e criptat pentru cheia privată a controller-ului `sealed-secrets` din clusterul unde a fost sigilat, **și** e scoped pe `namespace: data` + `name: data-service-db`. Dacă `argo-ms-gitops` ajunge pe un cluster nou (sau ai reinstalat sealed-secrets fără să restaurezi cheia), decriptarea eșuează cu `no key could decrypt secret` — iar simptomul e identic cu B2 (`secret not found`). Verifică întâi în evenimentele SealedSecret-ului, nu în pod.
-
----
+- **M1** `kong/declarative/kong.yml:8-11,22-28` — upstream + rută pentru `importer-service`, care nu există în repo-ul nou. Kong dbless pornește (nu validează DNS-ul target-urilor la boot), dar ruta dă 503. Fie aduci serviciul, fie scoți ruta — să nu rămână o rută moartă care arată ca un bug de rețea.
+- **M2** `kong/ingress/` n-are `kustomization.yaml`. În `ms-gitops` mergea pentru că `app-kong.yaml` îl lua ca **sursă separată de tip directory**. Un singur `path` pe folderul `kong/` nu aplică Ingress-urile — ArgoCD alege un singur tip de sursă per path.
+- **M3** SealedSecret-ul `data-service-db` e criptat pentru cheia controller-ului din clusterul unde a fost sigilat și e scoped pe `namespace: data` + `name: data-service-db`. Pe alt cluster (sau după reinstalarea sealed-secrets fără restaurarea cheii) dă `no key could decrypt secret` — simptom identic cu B5. Distincția se face în evenimentele SealedSecret-ului, nu în pod.
 
 ## 🟢 Cleanups
 
-### C1 — `repoURL` la copiere
-
-Fișierele din repo-ul vechi au `repoURL: .../ms-gitops.git`. În `app-data-service.yaml` ai actualizat corect ambele apariții la `argo-ms-gitops.git`. Când aduci `app-kong.yaml` (3 apariții), `app-oauth2-proxy.yaml` (1) și `infra-databases.yaml` (1), actualizează-le pe toate. Un `repoURL` greșit nu dă eroare de sintaxă — dă un Application care sincronizează fericit din repo-ul vechi și te induce în eroare la următoarea modificare.
-
-### C2 — numele resurselor se leagă corect
-
-`app-data-service.yaml:18` are `releaseName: data-service`, iar `templates/deployment.yaml` din chart folosește `{{ .Release.Name }}` pentru Deployment și Service. Deci Service-ul iese `data-service` în ns `business`, ceea ce se potrivește exact cu `target: data-service.business.svc:8081` din `kong.yml:6` și cu `containerPort: 8081` / `service.port: 8081` din values. Partea asta e coerentă — n-o atinge.
+- **C1 ✅** `repoURL` actualizat corect în `infra-databases.yaml:15`. A rămas valabil pentru ce urmează: `app-kong.yaml` are **3** apariții, `app-oauth2-proxy.yaml` una. Un `repoURL` lăsat pe `ms-gitops` nu dă eroare — sincronizează tăcut din repo-ul vechi.
+- **C2** `app-data-service.yaml:18` are `releaseName: data-service`, chart-ul folosește `{{ .Release.Name }}` pentru Deployment și Service → iese `data-service` în ns `business`, ceea ce se potrivește exact cu `target: data-service.business.svc:8081` din `kong.yml:6`. Coerent, nu atinge.
 
 ---
 
 ## Before / After (doar în document, nu aplicat în cod)
 
+### B5 — CR orfan în `infra/databases`
+
+| Acum | Cum ar trebui |
+|---|---|
+| `infra/databases/mongodb.yaml` (`kind: MongoDBCommunity`) + `infra/databases/secrets/mongodb-demo-secret-sealed.yaml`, fără operator în repo → `one or more synchronization tasks are not valid`, app-ul `databases` nu aplică NIMIC | ambele fișiere șterse din `argo-ms-gitops` (`git rm`). Nimic din stack nu le folosește. Directorul rămâne cu `mysql.yaml`, `mysql-init-job.yaml`, `postgres-cluster.yaml` + `secrets/{data-service-db,external-db-secrets,keycloak-db}-sealed.yaml` — toate cu operatorul prezent |
+
 ### B1 — chart-ul lipsă
 
 | Acum | Cum ar trebui |
 |---|---|
-| `argo-apps/app-data-service.yaml:16` → `path: business/charts/microservice`, iar `business/charts/` nu există în repo | copiat din `ms-gitops` întreg directorul: `business/charts/microservice/{Chart.yaml,values.yaml,templates/{deployment,service,ingress}.yaml}` — path-ul din Application rămâne neschimbat |
-
-### B2 — Application pentru `infra/databases`
-
-| Acum | Cum ar trebui |
-|---|---|
-| `infra/databases/` există în repo, dar `grep -l databases argo-apps/` → gol | fișier nou `argo-apps/infra-databases.yaml`: |
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: databases
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
-    targetRevision: master
-    path: infra/databases
-    directory:
-      recurse: true
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: data
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
-```
+| `app-data-service.yaml:16` → `path: business/charts/microservice`, iar `business/charts/` nu există | copiat din `ms-gitops` întreg `business/charts/microservice/{Chart.yaml,values.yaml,templates/{deployment,service,ingress}.yaml}`; verificat cu `git status` că `.gitignore` nu-l înghite. Path-ul din Application rămâne neschimbat |
 
 ### B3 — Application pentru Kong
 
 | Acum | Cum ar trebui |
 |---|---|
-| `business/app-microservices/kong/**` orfan, `kong-proxy` inexistent | fișier nou `argo-apps/app-kong.yaml`, wave 4, cu 4 surse: |
+| `business/app-microservices/kong/**` orfan, `kong-proxy` inexistent | fișier nou `argo-apps/app-kong.yaml`, wave 4, ns `business`, cu 4 surse: |
 
 ```yaml
   sources:
@@ -212,30 +136,32 @@ spec:
 
 | Acum | Cum ar trebui |
 |---|---|
-| Ingress-urile cer `auth-url` spre `oauth2-proxy.business.svc:4180`; nici manifestele, nici Application-ul nu există în repo | copiat `business/rsk/oauth2-proxy/{deployment,service,ingress,sealed-secret}.yaml` → `business/app-microservices/oauth2-proxy/` + `argo-apps/app-oauth2-proxy.yaml` (wave 4, `directory.recurse: true`, ns `business`) |
+| Ingress-urile cer `auth-url` spre `oauth2-proxy.business.svc:4180`; nici manifestele, nici Application-ul nu există | copiat `business/rsk/oauth2-proxy/{deployment,service,ingress,sealed-secret}.yaml` → `business/app-microservices/oauth2-proxy/` + `argo-apps/app-oauth2-proxy.yaml` (wave 4, `directory.recurse: true`, ns `business`) |
 
 ---
 
 ## Ordinea de reparat
 
-Contează, pentru că fiecare pas schimbă simptomul:
+Actualizată față de runda 1 — B5 se inserează înaintea a ceea ce era B2:
 
-1. **B1** — Application-ul iese din `ComparisonError` și începe să genereze manifeste.
-2. **B2** — pod-ul iese din `CreateContainerConfigError` și pornește.
-3. **B3 + B4** — abia acum are sens să testezi în browser; până aici orice 500/503 e zgomot, nu diagnostic.
+1. **B1** — Application-ul `data-service` iese din `ComparisonError` și începe să genereze manifeste.
+2. **B5** — Application-ul `databases` iese din `SYNC FAILED`, iar `data-service-db` ajunge în cluster → pod-ul pornește.
+3. **B3 + B4** — abia acum are sens testul în browser; până aici orice 500/503 e zgomot, nu diagnostic.
 
-Sync-wave-urile existente (databases 2, kong/oauth2-proxy 4, data-service 5) sunt deja corecte pentru lanțul ăsta — nu le schimba.
+Sync-wave-urile existente (databases 2, kong/oauth2-proxy 4, data-service 5) sunt corecte pentru lanțul ăsta — nu le schimba.
+
+**Regulă de verificare, valabilă de la B5 încolo:** după fiecare pas, uită-te întâi la **starea Application-ului în ArgoCD**, nu la pod. B2 a fost reparat corect și simptomul din pod n-a mișcat deloc — pentru că adevărul era într-un `SYNC FAILED` la două niveluri distanță.
 
 ---
 
 ## Q&A
 
-1. `app-data-service.yaml` are două surse din **același** repo, una cu `path:` și una cu `ref: values`. De ce e nevoie de a doua, când fișierul de valori e în același repo cu Application-ul? Ce s-ar întâmpla dacă ștergi sursa cu `ref: values` și pui `valueFiles: [business/app-microservices/data-service/values.yaml]`?
+1. `data-service-db-sealed.yaml` e un manifest perfect valid, iar `mongodb.yaml` e în alt fișier. De ce eșecul lui Mongo îl împiedică pe primul să ajungă în cluster — ce face ArgoCD **înainte** de a aplica resursele unei faze?
 
-2. `infra-databases.yaml` din repo-ul vechi avea `directory.recurse: true`, cu un comentariu explicit. Dacă îl adaugi **fără** `recurse`, ce anume ajunge în cluster și ce nu — și în ce stare rămâne pod-ul `data-service`?
+2. În `ms-gitops`, `infra-mongodb-operator.yaml` avea `sync-wave: 0`, iar `infra-databases.yaml` are `sync-wave: 2`. Dacă ai alege să aduci operatorul în loc să ștergi CR-ul, de ce n-ar fi de ajuns să pui cele două Applications în același wave?
 
-3. Ingress-ul are `auth-url` spre oauth2-proxy. Dacă oauth2-proxy lipsește, nginx întoarce 500, nu 401/403. De ce 500 și nu un cod de „neautorizat"? Ce concluzie greșită te-ar putea duce codul ăsta să tragi despre `data-service`?
+3. După ce repari B1 și B5, pod-ul `data-service` pornește. Ce te aștepți să vezi la `https://data-service.icode.mywire.org` — și care dintre B3/B4 dă 503 și care dă 500? De ce lipsa lui oauth2-proxy NU dă 401?
 
 ---
 
-Stop aici. Spune „next" dacă vrei să continui cu review pe `importer-service` sau pe partea de Keycloak/realm din repo-ul nou.
+Stop aici. Spune „next" dacă vrei review pe `importer-service` sau pe partea de Keycloak/realm din repo-ul nou.
