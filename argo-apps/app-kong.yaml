@@ -1,0 +1,43 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kong
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://charts.konghq.com
+      chart: kong
+      targetRevision: 3.4.0
+      helm:
+        releaseName: kong
+        valueFiles:
+          - $values/business/app-microservices/kong/values.yaml
+
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+      targetRevision: master
+      ref: values
+
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+      targetRevision: master
+      path: business/app-microservices/kong/ingress
+
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+      targetRevision: master
+      path: business/app-microservices/kong/declarative
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: business
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
