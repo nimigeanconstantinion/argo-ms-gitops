@@ -1,167 +1,191 @@
 # Code review — `argo-ms-gitops`
 
-**Runda 2**, la commit `230fc3e` („commit add infra-databases", 2026-08-19). Înlocuiește runda 1 (`af5cabc`, pe commit `9a71d7d`).
+**Runda 4**, la commit `4d9ee84` („commit app-kong", 2026-08-19 20:24) + log-ul de pornire al pod-ului `data-service` din cluster. Înlocuiește runda 3 (`01f151c`).
 
-Scop: de ce Application-ul `data-service` nu sincronizează în ArgoCD.
-
-Context neschimbat: repo-ul nou mută pe bucăți setup-ul din `ms-gitops`. Fișierele copiate sunt byte-identice cu originalele — problema e ce n-a fost copiat încă.
+Scop: de ce `data-service` nu funcționează. **Cauza s-a mutat din GitOps în imaginea aplicației.**
 
 ---
 
-## Ce s-a rezolvat din runda 1
+## Ce s-a rezolvat
 
-**B2 ✅ — `argo-apps/infra-databases.yaml` creat, corect.** Verificat `diff` contra originalului din `ms-gitops`: singura diferență e `repoURL`, actualizat la `argo-ms-gitops.git` (linia 15). `directory.recurse: true` păstrat (fără el s-ar fi ratat `secrets/*.yaml`), wave 2 păstrat, `ServerSideApply` păstrat. Exact ce trebuia.
+**B3 ✅ — Kong are Application.** `argo-apps/app-kong.yaml`, wave 4, ns `business`, cu exact cele 4 surse necesare. `diff` contra originalului din `ms-gitops`: singurele diferențe sunt cele intenționate — 3× `repoURL` actualizat și 3× path-ul mutat pe `business/app-microservices/`. Fără scăpări.
 
-**Dar nu produce încă efectul dorit** — vezi B5 mai jos. Application-ul e corect scris; conținutul directorului pe care îl aplică nu e complet.
+**M2 ✅ — rezolvat odată cu B3.** `kong/ingress` are acum sursa lui separată de tip directory (a patra din `app-kong.yaml`), deci Ingress-urile chiar se aplică. Asta era observația din rundele 2-3.
+
+**B1 + B2 + B5 ✅ DOVEDITE ÎN CLUSTER.** Log-ul pod-ului e verificarea pe care o ceream la pasul 1 din runda 3, și trece:
+
+```
+HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@426913c4
+HikariPool-1 - Start completed.
+Database version: 8.4.8
+```
+
+Într-o singură linie asta confirmă tot lanțul de infrastructură: chart-ul `api-ms` a randat un Deployment → pod-ul a pornit → SealedSecret-ul `data-service-db` s-a decriptat → Reflector l-a copiat în ns `business` → `secretEnv` l-a injectat → `mysql-init-job` chiar crease userul `dataapp` și baza `micro_db` → MOCO răspunde. Nimic din ce am semnalat în rundele 1-3 nu mai blochează.
 
 ---
 
 ## 🔴 Critice
 
-### B5 — NOU: `databases` conține un CR fără operatorul lui → sync-ul întregului Application eșuează
+### B6 — NOU: aplicația crapă la pornire pe un bug de JVM, nu de configurare
 
-`infra/databases/mongodb.yaml:5-6`
+`constantin-data-api/Dockerfile:1` — **fix-ul e în repo-ul aplicației, nu în ăsta.**
 
-```yaml
-apiVersion: mongodbcommunity.mongodb.com/v1
-kind: MongoDBCommunity
+```
+FROM openjdk:17.0.1-slim
 ```
 
-CRD-ul `mongodbcommunity.mongodb.com` e instalat de MongoDB Community Operator. În `argo-ms-gitops` **nu există nici `argo-apps/infra-mongodb-operator.yaml`, nici `infra/mongodb-operator/`** — ambele au rămas în `ms-gitops`. Verificare: `ls infra/` nu conține `mongodb-operator`; `grep -l mongodb argo-apps/*` → gol.
+Log-ul, după ce baza s-a conectat cu succes:
 
-Am verificat toate cele 3 CR-uri din director, nu doar unul:
-
-| Fișier | `kind` | Operatorul lui | În repo nou? |
-|---|---|---|---|
-| `mysql.yaml` | `MySQLCluster` (moco.cybozu.com) | `argo-apps/infra-moco.yaml` | ✅ |
-| `postgres-cluster.yaml` | `Cluster` (postgresql.cnpg.io) | `argo-apps/infra-cloudnative-pg.yaml` | ✅ |
-| `mongodb.yaml` | `MongoDBCommunity` | — | ❌ |
-
-**De ce e critic și nu doar „un pod în minus":** ArgoCD face **dry-run pe TOATE resursele fazei înainte de a aplica ceva**. O resursă cu `kind` necunoscut pică la dry-run, iar operațiunea de sync e abandonată în bloc — mesajul e `one or more synchronization tasks are not valid`. Îl mai ai o dată în istoric: exact eroarea de la migrarea CRD-urilor Strimzi.
-
-Consecință directă: **`data-service-db` nu se aplică**, deși e în același director și e perfect valid. Deci simptomul rămâne identic cu cel din runda 1 — pod-ul în `CreateContainerConfigError: secret "data-service-db" not found` — dar cauza s-a mutat. Dacă te uiți doar la pod, pare că B2 n-a fost reparat; dovada e în `Application databases` → `SYNC FAILED`, nu în pod.
-
-**Recomandarea (o singură variantă):** scoate Mongo din repo-ul nou, nu adăuga operatorul. Nimic din stack nu-l folosește — `grep -rl mongo` în afara lui `infra/databases/` nu întoarce nimic; data-service și importer-service merg pe MySQL. Un operator în plus înseamnă un CRD, un Deployment și un wave de întreținut pentru zero consumatori. Îl aduci din `ms-gitops` când chiar apare un serviciu care cere Mongo.
-
----
-
-### B1 — NEREZOLVAT: Application-ul indică un path care nu există în repo
-
-`argo-apps/app-data-service.yaml:16`
-
-```yaml
-path: business/charts/microservice
+```
+Error creating bean with name 'processorMetrics' ...
+Caused by: java.lang.NullPointerException:
+  Cannot invoke "jdk.internal.platform.CgroupInfo.getMountPoint()" because "anyController" is null
+    at java.base/jdk.internal.platform.cgroupv2.CgroupV2Subsystem.getInstance(CgroupV2Subsystem.java:81)
+    at java.base/jdk.internal.platform.CgroupSubsystemFactory.create(...)
+    ...
+    at io.micrometer.core.instrument.binder.system.ProcessorMetrics.<init>(ProcessorMetrics.java:85)
 ```
 
-Neschimbat față de runda 1. `git ls-tree -r --name-only HEAD business/` întoarce doar `app-microservices/**` — `business/charts/` nu există. Chart-ul e la `ms-gitops` → `business/charts/microservice/` (5 fișiere: `Chart.yaml`, `values.yaml`, `templates/{deployment,service,ingress}.yaml`).
+**Mecanismul, de citit de jos în sus:** actuator-ul înregistrează binderul Micrometer `ProcessorMetrics`; acesta cere `OperatingSystemMXBean`; JDK-ul, ca să raporteze corect CPU-ul *din container*, întreabă `jdk.internal.platform.Metrics` cine e cgroup-ul curent; `CgroupSubsystemFactory` detectează corect că nodul e pe **cgroup v2**, dar lista de controllere pe care o construiește din `/proc/self/mountinfo` + `/proc/self/cgroup` iese **goală**; `CgroupV2Subsystem.getInstance` dereferențiază acel `anyController` fără să verifice null → NPE în `java.base`, adică sub aplicație. Bean-ul pică, contextul Spring se anulează, procesul moare.
 
-ArgoCD: `ComparisonError ... app path does not exist`, la nivel de repo-server, înainte de orice comparație cu clusterul. **Acesta rămâne blocantul #1** — până nu-l rezolvi, B5 nici măcar nu contează, pentru că nu se generează niciun Deployment care să ceară secretul.
+Trei lucruri de reținut din asta:
 
-**Atenție la `.gitignore` când îl copiezi.** În `ms-gitops` chart-ul a fost o dată invizibil pentru ArgoCD exact din motivul ăsta: regula `charts/` prindea și `business/charts/`, deci folderul nu ajungea în git deși exista pe disc. `.gitignore`-ul din repo-ul nou trebuie verificat înainte de commit — un `git status` care nu-l arată e semnalul.
+1. **Nu e vina codului tău și nu e o eroare de config.** Stack trace-ul intră în `java.base/jdk.internal.*` — nimic din `application.yaml` nu-l poate influența.
+2. **Depinde de nod, nu de imagine.** Aceeași imagine pornește pe o gazdă cu alt layout de cgroup și crapă pe asta. De-aia „mergea înainte" nu e un contraargument — e exact semnătura acestui tip de bug. Explică și de ce n-ai văzut-o până acum.
+3. **De ce tocmai `openjdk:17.0.1-slim`:** `17.0.1` e din octombrie 2021, iar imaginea oficială `openjdk` de pe Docker Hub e **depreciată și înghețată** — nu mai primește build-uri. Deci ai fixat runtime-ul pe un JVM care n-a apucat fix-urile ulterioare de detecție cgroup v2. Un tag `17` fără patch, dintr-o imagine întreținută, ar fi luat corecția singur.
 
----
+**Fix (o singură variantă): copiază Dockerfile-ul de la importer-service.** Nu inventa nimic — pattern-ul corect există deja la tine în ecosistem, la `constantin-importer-api/Dockerfile`:
 
-### B3 — NEREZOLVAT: Kong nu are Application
+```dockerfile
+FROM eclipse-temurin:17-jdk AS build
+WORKDIR /app
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
+RUN ./mvnw dependency:go-offline -B
+COPY src src
+RUN ./mvnw package -DskipTests
 
-`business/app-microservices/kong/**` (orfan) și `argo-apps/` (lipsește `app-kong.yaml`)
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+EXPOSE 8081
+COPY --from=build /app/target/data-service-0.0.1-SNAPSHOT.jar app.jar
+ENTRYPOINT ["java","-jar","/app/app.jar"]
+```
 
-Neschimbat. Root app-ul scanează doar `argo-apps/` (`bootstrap/root.yaml:15-17`, `recurse: false`), deci `kong/values.yaml`, `kong/declarative/` și `kong/ingress/` sunt inerte. Ingress-ul `data-service-gateway.yaml:26-30` trimite spre Service-ul `kong-proxy`, care nu există → 503.
+**Atenție la două lucruri când îl adaptezi:**
 
----
+- **Fără sufixul `-alpine`.** `eclipse-temurin:*-alpine` e publicat doar pentru `linux/amd64`, iar CI-ul tău cere `linux/amd64,linux/arm64` → `buildx` pică cu `no match for platform in manifest` înainte de build. Ai pierdut 3 rulări pe capcana asta la importer.
+- **Portul e 8081**, nu 8082, iar numele jar-ului e `data-service-0.0.1-SNAPSHOT.jar`.
 
-### B4 — NEREZOLVAT: oauth2-proxy lipsește complet
+Bonus, gratuit, din multi-stage: azi imaginea de producție conține JDK complet, Maven, `.m2` și tot `src/` — jar-ul e servit din `/app/target/`, adică din directorul de build. Cu varianta de mai sus rămâne doar JRE + un jar.
+
+### B4 — oauth2-proxy lipsește complet (nerezolvat)
 
 `kong/ingress/data-service-gateway.yaml:9-10` și `importer-service-gateway.yaml:9-10`
 
-Neschimbat. Ambele Ingress-uri cer `auth-url: http://oauth2-proxy.business.svc.cluster.local:4180/oauth2/auth`, dar nici manifestele (`business/rsk/oauth2-proxy/` în vechi), nici Application-ul nu au fost aduse.
+Ambele Ingress-uri cer `auth-url: http://oauth2-proxy.business.svc.cluster.local:4180/oauth2/auth`, dar nici manifestele (`business/rsk/oauth2-proxy/` în `ms-gitops`), nici Application-ul nu au fost aduse.
 
-`auth_request` spre un upstream care nu rezolvă DNS → nginx întoarce **500, nu 401** — pe toate rutele, inclusiv `/actuator/health`. Se citește ca „aplicația e picată" deși aplicația n-a fost atinsă.
+Acum că Kong e pe drum, ăsta rămâne **singurul lucru din GitOps** între tine și un URL funcțional. `auth_request` spre un upstream care nu rezolvă DNS → nginx întoarce **500, nu 401** — pe toate rutele, inclusiv `/actuator/health`.
 
 ---
 
-## 🟡 Importante (neschimbate din runda 1)
+## 🟡 Importante
 
-- **M1** `kong/declarative/kong.yml:8-11,22-28` — upstream + rută pentru `importer-service`, care nu există în repo-ul nou. Kong dbless pornește (nu validează DNS-ul target-urilor la boot), dar ruta dă 503. Fie aduci serviciul, fie scoți ruta — să nu rămână o rută moartă care arată ca un bug de rețea.
-- **M2** `kong/ingress/` n-are `kustomization.yaml`. În `ms-gitops` mergea pentru că `app-kong.yaml` îl lua ca **sursă separată de tip directory**. Un singur `path` pe folderul `kong/` nu aplică Ingress-urile — ArgoCD alege un singur tip de sursă per path.
-- **M3** SealedSecret-ul `data-service-db` e criptat pentru cheia controller-ului din clusterul unde a fost sigilat și e scoped pe `namespace: data` + `name: data-service-db`. Pe alt cluster (sau după reinstalarea sealed-secrets fără restaurarea cheii) dă `no key could decrypt secret` — simptom identic cu B5. Distincția se face în evenimentele SealedSecret-ului, nu în pod.
+### M6 — NOU: validarea Jakarta e absentă, deci adnotările de validare nu fac nimic
+
+Log: `Failed to set up a Bean Validation provider: jakarta.validation.NoProviderFoundException: Unable to create a Configuration, because no Jakarta Bean Validation provider could be found.`
+
+Verificat în `constantin-data-api/pom.xml`: există `spring-boot-starter-actuator`, dar **nu** `spring-boot-starter-validation`. Fără provider (Hibernate Validator), orice `@Valid`, `@NotNull`, `@Size` din DTO-uri și entități e ignorat în tăcere — cererile invalide trec mai departe.
+
+E logat la nivel **INFO**, nu WARN. Ăsta e tiparul periculos: codul *arată* validat la citire, dar nu validează nimic la rulare, iar singurul semnal e o linie de INFO printre 30 la pornire. Fix: `spring-boot-starter-validation` în `pom.xml`.
+
+### M4 — numele secretului cerut de CR-ul Mongo nu există (nerezolvat)
+
+`infra/databases/mongodb.yaml:23` cere `mongodb-demo-password`; SealedSecret-ul produce `mongo-demo-password` (`mongodb-demo-secret-sealed.yaml:5,17`) — lipsește `db`. Bug moștenit din `ms-gitops`, deci Mongo n-a mers niciodată; l-ai activat acum. Nu blochează sync-ul (lipsa unui Secret nu e eroare de dry-run), dar lasă un Application permanent nesănătos. Fix: aliniază numele în `mongodb.yaml`, un singur fișier.
+
+### M5 — `.gitignore` a pierdut protecția pentru cache-ul Helm (nerezolvat)
+
+`.gitignore:20` → `# charts/`. A deblocat corect `business/charts/`, dar regula proteja **cache-ul de dependențe Helm**. Convenția din `ms-gitops` și car-platform: `charts/` + `!business/charts/` + `!business/charts/**`, în ordinea asta.
+
+### M1 — `kong.yml` rutează spre un serviciu care nu există (nerezolvat)
+
+`kong/declarative/kong.yml:8-11,22-28` — upstream + rută pentru `importer-service`, care nu e în repo-ul nou. Acum că Kong chiar se instalează, ruta devine vizibilă: `importer-service.icode.mywire.org` va da 503. Fie aduci serviciul, fie scoți ruta.
+
+### M7 — NOU: Kong dbless nu reîncarcă `kong.yml` la modificare
+
+`kong/declarative/kustomization.yaml:11-12` → `disableNameSuffixHash: true`
+
+ConfigMap-ul `kong-declarative` are nume stabil, iar Kong dbless citește configul **doar la pornire**. Deci o schimbare de rută în `kong.yml` se sincronizează în ArgoCD (`Synced`, verde), dar nu ajunge în proces — rute vechi, zero semnal de eroare. La prima instalare nu se vede; te lovește la a doua modificare.
+
+E aceeași problemă pe care ai rezolvat-o manual în `ms-gitops` cu `rollout restart deployment kong`. Forma durabilă, neaplicată nici acolo: `podAnnotations: { kong-config-rev: "N" }` în `kong/values.yaml`, incrementat la fiecare schimbare de rută → ArgoCD face rollout automat.
 
 ## 🟢 Cleanups
 
-- **C1 ✅** `repoURL` actualizat corect în `infra-databases.yaml:15`. A rămas valabil pentru ce urmează: `app-kong.yaml` are **3** apariții, `app-oauth2-proxy.yaml` una. Un `repoURL` lăsat pe `ms-gitops` nu dă eroare — sincronizează tăcut din repo-ul vechi.
-- **C2** `app-data-service.yaml:18` are `releaseName: data-service`, chart-ul folosește `{{ .Release.Name }}` pentru Deployment și Service → iese `data-service` în ns `business`, ceea ce se potrivește exact cu `target: data-service.business.svc:8081` din `kong.yml:6`. Coerent, nu atinge.
+### C5 — NOU: dialect Hibernate specificat inutil
+
+Log: `HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)`. Scoate proprietatea din `application-argo.yaml` — Hibernate 6 o deduce din conexiune.
+
+### C3 — numele chart-ului nu e numele folderului (nerezolvat)
+
+`business/charts/api-ms/Chart.yaml:2` → `name: microservice`, folderul e `api-ms`. Inofensiv în ArgoCD, dar `helm lint` îl semnalează. Dacă redenumirea e intenționată, du-o până la capăt.
+
+### C4 — SealedSecret resuscitat (nerezolvat)
+
+`infra/databases/secrets/mysql-secret-sealed.yaml` produce `mysql-app`, neconsumat de nimic (`grep -rn "mysql-app"` → doar fișierul). E secretul static retras deliberat în `ms-gitops` când a apărut `data-service-db`. Dead weight care arată exact ca acreditarea reală de MySQL.
 
 ---
 
 ## Before / After (doar în document, nu aplicat în cod)
 
-### B5 — CR orfan în `infra/databases`
+### B6 — imaginea data-service
 
 | Acum | Cum ar trebui |
 |---|---|
-| `infra/databases/mongodb.yaml` (`kind: MongoDBCommunity`) + `infra/databases/secrets/mongodb-demo-secret-sealed.yaml`, fără operator în repo → `one or more synchronization tasks are not valid`, app-ul `databases` nu aplică NIMIC | ambele fișiere șterse din `argo-ms-gitops` (`git rm`). Nimic din stack nu le folosește. Directorul rămâne cu `mysql.yaml`, `mysql-init-job.yaml`, `postgres-cluster.yaml` + `secrets/{data-service-db,external-db-secrets,keycloak-db}-sealed.yaml` — toate cu operatorul prezent |
+| `constantin-data-api/Dockerfile:1` → `FROM openjdk:17.0.1-slim`, single-stage, jar rulat din `/app/target/`, JVM înghețat pe 17.0.1 → NPE în `CgroupV2Subsystem` la pornire | multi-stage `eclipse-temurin:17-jdk` (build) → `eclipse-temurin:17-jre` (runtime), jar copiat ca `/app/app.jar`, `EXPOSE 8081`. **Fără `-alpine`** (doar amd64 → `buildx` pică pe multiarch) |
 
-### B1 — chart-ul lipsă
-
-| Acum | Cum ar trebui |
-|---|---|
-| `app-data-service.yaml:16` → `path: business/charts/microservice`, iar `business/charts/` nu există | copiat din `ms-gitops` întreg `business/charts/microservice/{Chart.yaml,values.yaml,templates/{deployment,service,ingress}.yaml}`; verificat cu `git status` că `.gitignore` nu-l înghite. Path-ul din Application rămâne neschimbat |
-
-### B3 — Application pentru Kong
+### M6 — validarea
 
 | Acum | Cum ar trebui |
 |---|---|
-| `business/app-microservices/kong/**` orfan, `kong-proxy` inexistent | fișier nou `argo-apps/app-kong.yaml`, wave 4, ns `business`, cu 4 surse: |
-
-```yaml
-  sources:
-    - repoURL: https://charts.konghq.com
-      chart: kong
-      targetRevision: 3.4.0
-      helm:
-        releaseName: kong
-        valueFiles:
-          - $values/business/app-microservices/kong/values.yaml
-    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
-      targetRevision: master
-      ref: values
-    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
-      targetRevision: master
-      path: business/app-microservices/kong/ingress
-    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
-      targetRevision: master
-      path: business/app-microservices/kong/declarative
-```
+| `pom.xml` are `spring-boot-starter-actuator`, dar nu are provider de validare → `@Valid`/`@NotNull` ignorate tăcut | adăugat `spring-boot-starter-validation` |
 
 ### B4 — oauth2-proxy
 
 | Acum | Cum ar trebui |
 |---|---|
-| Ingress-urile cer `auth-url` spre `oauth2-proxy.business.svc:4180`; nici manifestele, nici Application-ul nu există | copiat `business/rsk/oauth2-proxy/{deployment,service,ingress,sealed-secret}.yaml` → `business/app-microservices/oauth2-proxy/` + `argo-apps/app-oauth2-proxy.yaml` (wave 4, `directory.recurse: true`, ns `business`) |
+| Ingress-urile cer `auth-url` spre `oauth2-proxy.business.svc:4180`; nici manifestele, nici Application-ul nu există | copiat `business/rsk/oauth2-proxy/{deployment,service,ingress,sealed-secret}.yaml` → `business/app-microservices/oauth2-proxy/` + `argo-apps/app-oauth2-proxy.yaml` (wave 4, `directory.recurse: true`, ns `business`). **Sealed-secret-ul trebuie re-sigilat**, ca celelalte |
+
+### M7 — reload Kong
+
+| Acum | Cum ar trebui |
+|---|---|
+| `kong-declarative` cu nume stabil → Kong nu recitește `kong.yml`, ArgoCD raportează `Synced` pe o config care nu e în proces | `podAnnotations: { kong-config-rev: "1" }` în `kong/values.yaml`, incrementat la fiecare schimbare de rută |
 
 ---
 
-## Ordinea de reparat
+## Ce urmează
 
-Actualizată față de runda 1 — B5 se inserează înaintea a ceea ce era B2:
+1. **B6** — imaginea. Până nu pornește procesul, restul e teoretic. Reține că fix-ul e în `constantin-data-api`, iar noul SHA trebuie să ajungă în `business/app-microservices/data-service/values.yaml:5` (azi `tag: 92ff0cf`) — prin `cd-bump` dacă pipeline-ul e portat pe repo-ul nou, altfel manual.
+2. **B4** — oauth2-proxy. Cu Kong pus și pod-ul viu, ăsta e ultimul obstacol până la `https://data-service.icode.mywire.org`.
+3. **M6 + C5** — în același commit cu B6, sunt în același repo.
+4. **M4 + M5 + M7 + C4** — igienă GitOps, un singur commit.
 
-1. **B1** — Application-ul `data-service` iese din `ComparisonError` și începe să genereze manifeste.
-2. **B5** — Application-ul `databases` iese din `SYNC FAILED`, iar `data-service-db` ajunge în cluster → pod-ul pornește.
-3. **B3 + B4** — abia acum are sens testul în browser; până aici orice 500/503 e zgomot, nu diagnostic.
+Sync-wave-urile (mongodb-operator 0, databases 2, kong 4, data-service 5) sunt corecte.
 
-Sync-wave-urile existente (databases 2, kong/oauth2-proxy 4, data-service 5) sunt corecte pentru lanțul ăsta — nu le schimba.
-
-**Regulă de verificare, valabilă de la B5 încolo:** după fiecare pas, uită-te întâi la **starea Application-ului în ArgoCD**, nu la pod. B2 a fost reparat corect și simptomul din pod n-a mișcat deloc — pentru că adevărul era într-un `SYNC FAILED` la două niveluri distanță.
+**Observație de metodă.** În trei runde diagnosticul s-a mutat de fiecare dată cu un nivel mai jos: path inexistent (repo-server) → sync abandonat la dry-run (ArgoCD) → secret injectat, proces care crapă (JVM). Fiecare fix a fost corect și fiecare a scos la iveală următorul strat. Ăsta e mersul normal — semnul că merge bine nu e „a dispărut eroarea", ci „eroarea s-a mutat mai adânc".
 
 ---
 
 ## Q&A
 
-1. `data-service-db-sealed.yaml` e un manifest perfect valid, iar `mongodb.yaml` e în alt fișier. De ce eșecul lui Mongo îl împiedică pe primul să ajungă în cluster — ce face ArgoCD **înainte** de a aplica resursele unei faze?
+1. Log-ul arată `HikariPool-1 - Start completed` **înainte** de crash. Ce anume dovedește linia asta despre B1, B2 și B5 — și de ce e o verificare mai puternică decât „Application-ul e Synced în ArgoCD"?
 
-2. În `ms-gitops`, `infra-mongodb-operator.yaml` avea `sync-wave: 0`, iar `infra-databases.yaml` are `sync-wave: 2`. Dacă ai alege să aduci operatorul în loc să ștergi CR-ul, de ce n-ar fi de ajuns să pui cele două Applications în același wave?
+2. Stack trace-ul trece prin `io.micrometer...ProcessorMetrics` și ajunge în `java.base/jdk.internal.platform`. Dacă ai scoate `spring-boot-starter-actuator` din `pom.xml`, aplicația ar porni — de ce ar fi asta o reparație greșită?
 
-3. După ce repari B1 și B5, pod-ul `data-service` pornește. Ce te aștepți să vezi la `https://data-service.icode.mywire.org` — și care dintre B3/B4 dă 503 și care dă 500? De ce lipsa lui oauth2-proxy NU dă 401?
+3. `kong-declarative` are `disableNameSuffixHash: true`, deci nume stabil. Ce câștigi din numele stabil și ce pierzi (M7)? Ce s-ar întâmpla dacă l-ai scoate pur și simplu?
 
 ---
 
-Stop aici. Spune „next" dacă vrei review pe `importer-service` sau pe partea de Keycloak/realm din repo-ul nou.
+Stop aici. Spune „next" dacă vrei să duc B6 + M6 + C5 într-un `CODE_REVIEW.md` separat în `constantin-data-api` (unde e și fix-ul), sau review pe `importer-service` / Keycloak din repo-ul nou.
