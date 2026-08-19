@@ -1,0 +1,33 @@
+replicas: 1
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+containerPort: 8080
+
+podAnnotations: {}
+
+env: {}
+
+secretEnv: {}
+
+probes: {}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+service:
+  port: 8080
+
+ingress:
+  enabled: false
+  className: nginx
+  clusterIssuer: letsencrypt-prod
+  host: ""
+  tlsSecretName: ""

@@ -13,7 +13,7 @@ spec:
   sources:
     - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
       targetRevision: master
-      path: business/charts/microservice
+      path: business/charts/api-ms
       helm:
         releaseName: data-service
         valueFiles:
