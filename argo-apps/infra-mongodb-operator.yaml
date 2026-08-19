@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mongodb-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://mongodb.github.io/helm-charts
+      chart: community-operator
+      targetRevision: 0.13.0
+      helm:
+        releaseName: mongodb-operator
+        valueFiles:
+          - $values/infra/mongodb-operator/values.yaml
+
+    - repoURL: https://github.com/nimigeanconstantinion/argo-ms-gitops.git
+      targetRevision: master
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -1,0 +1,11 @@
+# MongoDB Community Operator.
+# Operatorul urmareste resurse MongoDBCommunity DOAR din namespace-ul setat aici.
+# CR-ul nostru e in `data`, deci operatorul (instalat tot in `data`) urmareste `data`.
+operator:
+  watchNamespace: data
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
