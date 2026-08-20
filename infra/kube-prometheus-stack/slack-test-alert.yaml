@@ -17,3 +17,11 @@ spec:
           annotations:
             summary: "Slack test alert"
             description: "Test alert for Alertmanager Slack notifications."
+        - alert: CPUTemperatureHigh
+          expr: max(node_hwmon_temp_celsius) by (instance) > 75
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "⚠️ Temperatură Ridicată CPU: {{ $labels.instance }}"
+            description: "Temperatura procesorului pe nodul *{{ $labels.instance }}* a depășit pragul critic și este de *{{ $value | printf \"%.1f\" }}°C*."
