@@ -1,12 +1,51 @@
+# apiVersion: monitoring.coreos.com/v1alpha1
+# kind: AlertmanagerConfig
+# metadata:
+#   name: default
+#   namespace: monitoring
+#   labels:
+#     # Trebuie să matche cu alertmanagerConfigSelector din kube-prometheus-stack chart
+#     alertmanagerConfig: default
+# spec:
+#   route:
+#     receiver: slack
+#     groupBy: ["alertname", "namespace"]
+#     groupWait: 30s
+#     groupInterval: 5m
+#     repeatInterval: 4h
+#     routes:
+#       - matchers:
+#           - name: severity
+#             value: critical
+#         receiver: slack
+#         groupWait: 0s
+#         repeatInterval: 1h
+
+#   receivers:
+#     - name: slack
+#       slackConfigs:
+#         - apiURL:
+#             name: slack-webhook
+#             key: url
+#           title: '{{ template "slack.default.title" . }}'
+#           text: '{{ template "slack.default.text" . }}'
+#           sendResolved: true
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
 metadata:
   name: default
   namespace: monitoring
   labels:
-    # Trebuie să matche cu alertmanagerConfigSelector din kube-prometheus-stack chart
     alertmanagerConfig: default
 spec:
+  timeIntervals:
+    - name: ore-de-lucru
+      timeIntervals:
+        - times:
+            - startTime: "08:00"
+              endTime: "17:00"
+          weekdays: ["monday:friday"]
+
   route:
     receiver: slack
     groupBy: ["alertname", "namespace"]
@@ -15,11 +54,13 @@ spec:
     repeatInterval: 4h
     routes:
       - matchers:
-          - name: severity
-            value: critical
+          - name: alertname
+            value: CPUTemperatureHigh
         receiver: slack
         groupWait: 0s
-        repeatInterval: 1h
+        repeatInterval: 10m # Aici se definește ruta și periodicitatea de 10 min
+        activeTimeIntervals:
+          - ore-de-lucru
 
   receivers:
     - name: slack
@@ -28,5 +69,9 @@ spec:
             name: slack-webhook
             key: url
           title: '{{ template "slack.default.title" . }}'
-          text: '{{ template "slack.default.text" . }}'
+          text: |-
+            {{ range .Alerts }}
+            *Alertă:* {{ .Annotations.summary }}
+            *Detalii:* {{ .Annotations.description }}
+            {{ end }}
           sendResolved: true
