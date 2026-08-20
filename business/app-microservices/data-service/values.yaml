@@ -2,7 +2,7 @@ replicas: 1
 
 image:
   repository: ion21/data-service
-  tag: 92ff0cf
+  tag: 4c98961
   pullPolicy: IfNotPresent
 
 containerPort: 8081
