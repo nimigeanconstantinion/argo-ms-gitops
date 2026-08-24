@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: business
+  labels:
+    app: oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+          args:
+            - --provider=keycloak-oidc
+            - --oidc-issuer-url=https://auth.icode.mywire.org/realms/rsk
+            - --client-id=oauth2-proxy
+            - --oidc-extra-audience=account
+            - --redirect-url=https://data-service.icode.mywire.org/oauth2/callback
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --upstream=static://200
+            - --email-domain=*
+            - --allowed-group=/admins
+            # scope explicit fara "groups": Keycloak n-are client scope "groups" -> invalid_scope.
+            # Grupul /admins vine oricum din protocolMapper-ul clientului, nu din scope.
+            - --scope=openid email profile
+            - --cookie-secure=true
+            - --cookie-domain=.icode.mywire.org
+            - --whitelist-domain=.icode.mywire.org
+            - --skip-provider-button=true
+            - --set-xauthrequest=true
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-keycloak
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-keycloak
+                  key: cookie-secret
+          ports:
+            - containerPort: 4180
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
