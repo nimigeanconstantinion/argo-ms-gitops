@@ -7,6 +7,10 @@ metadata:
     app: oauth2-proxy
 spec:
   replicas: 1
+  # Recreate, nu RollingUpdate: nodul n-are CPU liber pentru un al doilea pod,
+  # deci rollout-ul ramane blocat cu pod-ul vechi in viata. Asa elibereaza el intai.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: oauth2-proxy
