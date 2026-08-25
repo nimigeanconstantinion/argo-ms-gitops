@@ -17,9 +17,9 @@ spec:
           annotations:
             summary: "Slack test alert"
             description: "Test alert for Alertmanager Slack notifications."
-        # 2. Alerta pentru temperatura de peste 75°C
+        # 2. Alerta pentru temperatura de peste 80°C
         - alert: CPUTemperatureHigh
-          expr: max(node_hwmon_temp_celsius) by (instance) > 85
+          expr: max(node_hwmon_temp_celsius) by (instance) > 80
           for: 1m
           labels:
             severity: warning
