@@ -2,7 +2,7 @@ replicas: 1
 
 image:
   repository: ion21/importer-service
-  tag: 27578ab
+  tag: e85fa3f
   pullPolicy: IfNotPresent
 
 containerPort: 8082
