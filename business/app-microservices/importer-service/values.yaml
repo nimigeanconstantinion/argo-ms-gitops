@@ -17,7 +17,7 @@ env:
   SPRING_PROFILES_ACTIVE: argo
   KAFKA_BOOTSTRAP_SERVERS: demo-kafka-bootstrap.messaging.svc:9092
   APP_KAFKA_TOPIC: product-topic
-  MYSQL_URL: "jdbc:mysql://78.96.25.131:3306/test_db"
+  MYSQL_URL: "jdbc:mysql://icode.mywire.org:3306/test_db"
   KEYCLOAK_SERVER_URL: https://auth.icode.mywire.org
   KEYCLOAK_REALM: rsk
   KEYCLOAK_ISSUER: https://auth.icode.mywire.org/realms/rsk
