@@ -34,9 +34,9 @@ probes:
 resources:
   requests:
     cpu: 20m
-    memory: 128Mi
+    memory: 256Mi
   limits:
-    memory: 512Mi
+    memory: 1Gi
 
 service:
   port: 8081
