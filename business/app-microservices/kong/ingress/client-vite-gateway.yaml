@@ -6,8 +6,9 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.business.svc.cluster.local:4180/oauth2/auth"
-    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+    # Fara oauth2-proxy gate: e o SPA cu login propriu (keycloak-js), Home trebuie
+    # sa fie public. Aprobarea pe grup (/users, /admins) se verifica acum in
+    # backend (data-service/importer SecurityConfig), nu la nivel de Ingress.
     nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
 spec:
