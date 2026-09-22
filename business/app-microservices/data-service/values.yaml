@@ -15,6 +15,7 @@ podAnnotations:
 
 env:
   SPRING_PROFILES_ACTIVE: argo
+  APP_CORS_ALLOWED_ORIGINS: https://app.icode.mywire.org
   KAFKA_BOOTSTRAP_SERVERS: demo-kafka-bootstrap.messaging.svc:9092
   APP_KAFKA_TOPIC: product-topic
   MYSQL_URL: "jdbc:mysql://moco-mysql-primary.data.svc:3306/micro_db?allowPublicKeyRetrieval=true&useSSL=false"
