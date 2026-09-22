@@ -47,12 +47,12 @@ services:
     host: client-vite-upstream
     port: 80
     protocol: http
-    # preserve_host: fara asta Kong trimite Host=client-vite.business.svc (numele
-    # intern al upstream-ului) catre pod. nginx-ul din container construieste
-    # redirectul "/ -> /ui/" ca URL absolut pe baza acelui Host, deci browserul
-    # ajunge pe un hostname intern nerezolvabil in loc de app.icode.mywire.org.
-    preserve_host: true
     routes:
       - name: client-vite
         hosts:
           - app.icode.mywire.org
+        # preserve_host: fara asta Kong trimite Host=client-vite.business.svc (numele
+        # intern al upstream-ului) catre pod. nginx-ul din container construieste
+        # redirectul "/ -> /ui/" ca URL absolut pe baza acelui Host, deci browserul
+        # ajunge pe un hostname intern nerezolvabil in loc de app.icode.mywire.org.
+        preserve_host: true
