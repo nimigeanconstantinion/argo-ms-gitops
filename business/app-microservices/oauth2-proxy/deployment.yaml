@@ -33,8 +33,9 @@ spec:
             - --upstream=static://200
             - --email-domain=*
             - --allowed-group=/admins
+            - --allowed-group=/users
             # scope explicit fara "groups": Keycloak n-are client scope "groups" -> invalid_scope.
-            # Grupul /admins vine oricum din protocolMapper-ul clientului, nu din scope.
+            # Grupurile vin oricum din protocolMapper-ul clientului, nu din scope.
             - --scope=openid email profile
             - --cookie-secure=true
             - --cookie-domain=.icode.mywire.org

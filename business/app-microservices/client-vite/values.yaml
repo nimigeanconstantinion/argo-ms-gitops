@@ -1,0 +1,26 @@
+# tag e un placeholder pana la primul merge pe master al client-vite -> pipeline-ul CI
+# (deploy.yml, job cd-bump) suprascrie automat aceasta linie cu sha-ul scurt real publicat.
+replicas: 1
+
+image:
+  repository: ion21/client-vite
+  tag: latest
+  pullPolicy: IfNotPresent
+
+containerPort: 80
+
+probes:
+  path: /ui/
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+service:
+  port: 80
+
+ingress:
+  enabled: false   # traficul vine prin Kong (kong/declarative + kong/ingress), nu prin Ingress-ul chart-ului

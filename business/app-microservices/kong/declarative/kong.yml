@@ -9,6 +9,10 @@ upstreams:
     targets:
       - target: importer-service.business.svc:8082
         weight: 100
+  - name: client-vite-upstream
+    targets:
+      - target: client-vite.business.svc:80
+        weight: 100
 
 services:
   - name: data-service
@@ -16,14 +20,34 @@ services:
     port: 8081
     protocol: http
     routes:
-      - name: data-service
+      - name: data-service                 # existing — unchanged
         hosts:
           - data-service.icode.mywire.org
+      - name: api-command-route            # new: api.icode.mywire.org/api/v1/command/* -> data-service
+        hosts:
+          - api.icode.mywire.org
+        paths:
+          - /api/v1/command
+        strip_path: false
   - name: importer-service
     host: importer-service-upstream
     port: 8082
     protocol: http
     routes:
-      - name: importer-service
+      - name: importer-service             # existing — unchanged
         hosts:
           - importer-service.icode.mywire.org
+      - name: api-query-route              # new: api.icode.mywire.org/api/v1/query -> importer-service
+        hosts:
+          - api.icode.mywire.org
+        paths:
+          - /api/v1/query
+        strip_path: false
+  - name: client-vite
+    host: client-vite-upstream
+    port: 80
+    protocol: http
+    routes:
+      - name: client-vite
+        hosts:
+          - app.icode.mywire.org
