@@ -4,7 +4,7 @@ replicas: 1
 
 image:
   repository: ion21/client-vite
-  tag: latest
+  tag: f960c7f
   pullPolicy: IfNotPresent
 
 containerPort: 80
